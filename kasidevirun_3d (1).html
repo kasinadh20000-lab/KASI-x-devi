@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kasidevirun - 3D Temple Runner</title>
+    <!-- Tailwind CSS for crisp UI overlays -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js for 3D Graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Tone.js for Procedural Sound Effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- Google Fonts for Ancient Temple Typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;800;900&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #120804;
+            font-family: 'Poppins', sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+
+        #game-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .font-temple {
+            font-family: 'Cinzel', serif;
+        }
+
+        /* Custom Glowing Temple Button */
+        .temple-btn {
+            background: linear-gradient(135deg, #f59e0b 0%, #b45309 100%);
+            border: 2px solid #fde68a;
+            box-shadow: 0 6px 20px rgba(245, 158, 11, 0.45), inset 0 2px 4px rgba(255, 255, 255, 0.4);
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .temple-btn:hover {
+            transform: translateY(-2px) scale(1.03);
+            box-shadow: 0 10px 25px rgba(245, 158, 11, 0.65), inset 0 2px 6px rgba(255, 255, 255, 0.6);
+        }
+
+        .temple-btn:active {
+            transform: translateY(1px) scale(0.98);
+        }
+
+        /* Floating animation for title */
+        @keyframes floatTitle {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+        }
+
+        .animate-float {
+            animation: floatTitle 3.5s ease-in-out infinite;
+        }
+
+        /* Glassmorphism HUD panels */
+        .hud-panel {
+            background: rgba(24, 12, 6, 0.65);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(251, 191, 36, 0.35);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="relative w-full h-full">
+
+    <!-- 3D WebGL Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- Top HUD Bar (Visible during gameplay) -->
+    <div id="hud" class="hidden absolute top-0 left-0 w-full p-3 sm:p-5 flex justify-between items-start pointer-events-none z-10">
+        <!-- Left: Score & Distance -->
+        <div class="flex flex-col gap-2">
+            <div class="hud-panel rounded-2xl px-4 py-2 flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-amber-500/20 border border-amber-400 flex items-center justify-center text-amber-300 font-bold text-sm">
+                    ★
+                </div>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-amber-300/80 font-semibold">Score</div>
+                    <div id="score-display" class="text-xl sm:text-2xl font-bold text-white font-temple tracking-wide">0</div>
+                </div>
+            </div>
+
+            <!-- Active Powerup Indicator -->
+            <div id="powerup-hud" class="hidden hud-panel rounded-xl px-3 py-1.5 flex items-center gap-2 border-cyan-400/60">
+                <span id="powerup-icon" class="text-lg">🛡️</span>
+                <div class="flex-1">
+                    <div id="powerup-name" class="text-xs font-bold text-cyan-300 uppercase">Aegis Shield</div>
+                    <div class="w-24 h-1.5 bg-gray-800 rounded-full overflow-hidden mt-1">
+                        <div id="powerup-bar" class="h-full bg-cyan-400 w-full transition-all duration-75"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Coins & Sound Toggle -->
+        <div class="flex items-center gap-2 sm:gap-3 pointer-events-auto">
+            <div class="hud-panel rounded-2xl px-4 py-2 flex items-center gap-2.5">
+                <!-- Custom SVG Gold Coin -->
+                <svg class="w-6 h-6 text-amber-400 drop-shadow" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="12" r="10" fill="#f59e0b" stroke="#fef08a" stroke-width="2"/>
+                    <circle cx="12" cy="12" r="6" fill="none" stroke="#fef08a" stroke-width="1.5" stroke-dasharray="2 2"/>
+                </svg>
+                <div>
+                    <div class="text-[10px] uppercase tracking-wider text-amber-300/80 font-semibold">Offerings</div>
+                    <div id="coin-display" class="text-lg sm:text-xl font-bold text-amber-300">0</div>
+                </div>
+            </div>
+
+            <button id="sound-toggle" class="hud-panel p-3 rounded-2xl text-amber-200 hover:text-white hover:border-amber-400 transition" title="Toggle Audio">
+                <svg id="sound-on-icon" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/>
+                </svg>
+                <svg id="sound-off-icon" class="w-6 h-6 hidden text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"/>
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- On-Screen Touch / Quick Action Controls (Bottom Corners for Mobile/Tablet convenience) -->
+    <div id="mobile-controls" class="hidden sm:hidden absolute bottom-6 left-0 w-full px-6 flex justify-between items-center pointer-events-none z-10">
+        <div class="flex gap-3 pointer-events-auto">
+            <button id="btn-left" class="hud-panel w-14 h-14 rounded-2xl flex items-center justify-center text-amber-200 active:bg-amber-500/40 text-2xl font-bold">◀</button>
+            <button id="btn-right" class="hud-panel w-14 h-14 rounded-2xl flex items-center justify-center text-amber-200 active:bg-amber-500/40 text-2xl font-bold">▶</button>
+        </div>
+        <div class="flex gap-3 pointer-events-auto">
+            <button id="btn-slide" class="hud-panel w-14 h-14 rounded-2xl flex items-center justify-center text-amber-200 active:bg-amber-500/40 text-xl font-bold">▼</button>
+            <button id="btn-jump" class="hud-panel w-14 h-14 rounded-2xl flex items-center justify-center text-amber-200 active:bg-amber-500/40 text-xl font-bold">▲</button>
+        </div>
+    </div>
+
+    <!-- Main Menu Overlay -->
+    <div id="start-screen" class="absolute inset-0 bg-gradient-to-b from-black/75 via-amber-950/60 to-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 z-20 text-center">
+        <div class="max-w-md w-full flex flex-col items-center">
+            <!-- Temple Emblem SVG -->
+            <div class="w-20 h-20 mb-4 rounded-full bg-gradient-to-tr from-amber-600 to-yellow-300 p-1 shadow-2xl animate-float">
+                <div class="w-full h-full bg-stone-950 rounded-full flex items-center justify-center border border-amber-400/50">
+                    <svg class="w-11 h-11 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2L4 7v2h16V7l-8-5zm-6 9v7H4v2h16v-2h-2v-7h-2v7h-3v-7h-2v7H8v-7H6z"/>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="text-xs uppercase tracking-[0.35em] text-amber-400 font-semibold mb-1">Sacred Relic Escape</div>
+            <h1 class="font-temple text-4xl sm:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-b from-yellow-200 via-amber-400 to-orange-600 drop-shadow-[0_4px_12px_rgba(245,158,11,0.5)] mb-3">
+                KASIDEVIRUN
+            </h1>
+            <p class="text-amber-100/80 text-sm sm:text-base mb-8 max-w-sm leading-relaxed">
+                Sprint across the ancient stone causeway of Kasidevi, leap over fire pits, slide beneath temple gates, and collect sacred golden offerings!
+            </p>
+
+            <!-- High Score Badge -->
+            <div id="menu-highscore-box" class="hud-panel rounded-xl px-5 py-2 mb-6 flex items-center gap-2">
+                <span class="text-amber-400 text-sm">🏆 Best Run:</span>
+                <span id="menu-highscore" class="text-white font-bold font-temple">0</span>
+            </div>
+
+            <button id="start-btn" class="temple-btn w-full sm:w-64 py-4 px-8 rounded-2xl font-temple font-extrabold text-xl text-stone-950 tracking-wider uppercase cursor-pointer">
+                Begin Run
+            </button>
+
+            <!-- Controls Legend -->
+            <div class="mt-8 grid grid-cols-2 gap-3 w-full text-left text-xs text-amber-200/80">
+                <div class="hud-panel rounded-xl p-3 flex items-center gap-2.5">
+                    <span class="bg-amber-500/20 text-amber-300 px-2 py-1 rounded font-mono font-bold">A / D / ◀ ▶</span>
+                    <span>Switch Lanes</span>
+                </div>
+                <div class="hud-panel rounded-xl p-3 flex items-center gap-2.5">
+                    <span class="bg-amber-500/20 text-amber-300 px-2 py-1 rounded font-mono font-bold">W / S / ▲ ▼</span>
+                    <span>Jump & Slide</span>
+                </div>
+            </div>
+            <div class="mt-2 text-[11px] text-amber-300/60">
+                Swipe anywhere on mobile • Drag mouse to tilt camera view
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over Overlay -->
+    <div id="gameover-screen" class="hidden absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-6 z-20 text-center">
+        <div class="hud-panel max-w-md w-full rounded-3xl p-6 sm:p-8 border-amber-500/50 flex flex-col items-center">
+            <div class="text-xs uppercase tracking-[0.25em] text-red-400 font-bold mb-1">The Guardians Caught Up</div>
+            <h2 class="font-temple text-3xl sm:text-4xl font-black text-amber-300 mb-6">RUN ENDED</h2>
+
+            <div class="grid grid-cols-2 gap-4 w-full mb-6">
+                <div class="bg-stone-900/80 border border-amber-500/20 rounded-2xl p-4">
+                    <div class="text-xs text-amber-200/70 uppercase">Final Score</div>
+                    <div id="final-score" class="text-2xl sm:text-3xl font-bold text-white font-temple mt-1">0</div>
+                </div>
+                <div class="bg-stone-900/80 border border-amber-500/20 rounded-2xl p-4">
+                    <div class="text-xs text-amber-200/70 uppercase">Offerings</div>
+                    <div id="final-coins" class="text-2xl sm:text-3xl font-bold text-amber-400 mt-1">0</div>
+                </div>
+            </div>
+
+            <div class="w-full bg-amber-950/50 border border-amber-400/30 rounded-xl py-2.5 px-4 mb-6 flex justify-between items-center">
+                <span class="text-sm text-amber-200">All-Time High Score</span>
+                <span id="final-highscore" class="font-temple font-bold text-lg text-yellow-300">0</span>
+            </div>
+
+            <button id="restart-btn" class="temple-btn w-full py-4 px-8 rounded-2xl font-temple font-extrabold text-lg text-stone-950 tracking-wider uppercase cursor-pointer">
+                Run Again
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * KASIDEVIRUN - 3D Endless Temple Runner
+         * Built with Three.js & Tone.js in a single self-contained file.
+         */
+
+        // ==========================================
+        // 1. PROCEDURAL AUDIO ENGINE (Tone.js)
+        // ==========================================
+        class SoundEngine {
+            constructor() {
+                this.enabled = true;
+                this.initialized = false;
+                this.synth = null;
+                this.noiseSynth = null;
+                this.metalSynth = null;
+            }
+
+            async init() {
+                if (this.initialized) return;
+                try {
+                    await Tone.start();
+                    // Melodic synth for coins & powerups
+                    this.synth = new Tone.PolySynth(Tone.Synth, {
+                        oscillator: { type: "triangle" },
+                        envelope: { attack: 0.01, decay: 0.15, sustain: 0.05, release: 0.2 }
+                    }).toDestination();
+                    this.synth.volume.value = -8;
+
+                    // Swoosh / slide noise
+                    this.noiseSynth = new Tone.NoiseSynth({
+                        noise: { type: "pink" },
+                        envelope: { attack: 0.02, decay: 0.18, sustain: 0 }
+                    }).toDestination();
+                    this.noiseSynth.volume.value = -14;
+
+                    // Impact / crash sound
+                    this.crashSynth = new Tone.MembraneSynth({
+                        pitchDecay: 0.08,
+                        octaves: 4,
+                        oscillator: { type: "sine" },
+                        envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 0.4 }
+                    }).toDestination();
+                    this.crashSynth.volume.value = -4;
+
+                    this.initialized = true;
+                } catch (e) {
+                    console.warn("Audio initialization deferred:", e);
+                }
+            }
+
+            playCoin() {
+                if (!this.enabled || !this.initialized) return;
+                const now = Tone.now();
+                this.synth.triggerAttackRelease("B5", "32n", now);
+                this.synth.triggerAttackRelease("E6", "16n", now + 0.05);
+            }
+
+            playJump() {
+                if (!this.enabled || !this.initialized) return;
+                this.synth.triggerAttackRelease(["C4", "G4"], "16n");
+            }
+
+            playSlide() {
+                if (!this.enabled || !this.initialized) return;
+                this.noiseSynth.triggerAttackRelease("16n");
+            }
+
+            playLaneSwitch() {
+                if (!this.enabled || !this.initialized) return;
+                this.synth.triggerAttackRelease("E4", "32n");
+            }
+
+            playPowerup() {
+                if (!this.enabled || !this.initialized) return;
+                const now = Tone.now();
+                this.synth.triggerAttackRelease("C5", "16n", now);
+                this.synth.triggerAttackRelease("E5", "16n", now + 0.07);
+                this.synth.triggerAttackRelease("G5", "16n", now + 0.14);
+                this.synth.triggerAttackRelease("C6", "8n", now + 0.21);
+            }
+
+            playShieldBreak() {
+                if (!this.enabled || !this.initialized) return;
+                this.synth.triggerAttackRelease(["G4", "C4"], "8n");
+            }
+
+            playCrash() {
+                if (!this.enabled || !this.initialized) return;
+                this.crashSynth.triggerAttackRelease("C2", "4n");
+            }
+        }
+
+        const audio = new SoundEngine();
+
+        // ==========================================
+        // 2. GAME STATE & CONSTANTS
+        // ==========================================
+        const LANE_WIDTH = 2.6;
+        const LANES = [-LANE_WIDTH, 0, LANE_WIDTH];
+        const SEGMENT_LENGTH = 20;
+        const NUM_SEGMENTS = 12;
+
+        const state = {
+            isPlaying: false,
+            isGameOver: false,
+            score: 0,
+            coins: 0,
+            highScore: parseInt(localStorage.getItem('kasidevirun_highscore') || '0', 10),
+            speed: 22,
+            baseSpeed: 22,
+            maxSpeed: 54,
+            currentLane: 1, // 0: Left, 1: Center, 2: Right
+            targetX: 0,
+            isJumping: false,
+            jumpVelocity: 0,
+            gravity: -52,
+            isSliding: false,
+            slideTimer: 0,
+            shieldActive: false,
+            shieldTimer: 0,
+            magnetActive: false,
+            magnetTimer: 0,
+            cameraOffsetYaw: 0,
+            cameraOffsetPitch: 0,
+            shakeIntensity: 0
+        };
+
+        // DOM Elements
+        const canvas = document.getElementById('game-canvas');
+        const hudEl = document.getElementById('hud');
+        const mobileControlsEl = document.getElementById('mobile-controls');
+        const startScreenEl = document.getElementById('start-screen');
+        const gameoverScreenEl = document.getElementById('gameover-screen');
+        const scoreDisplayEl = document.getElementById('score-display');
+        const coinDisplayEl = document.getElementById('coin-display');
+        const menuHighscoreEl = document.getElementById('menu-highscore');
+        const powerupHudEl = document.getElementById('powerup-hud');
+        const powerupIconEl = document.getElementById('powerup-icon');
+        const powerupNameEl = document.getElementById('powerup-name');
+        const powerupBarEl = document.getElementById('powerup-bar');
+
+        menuHighscoreEl.textContent = state.highScore.toLocaleString();
+
+        // ==========================================
+        // 3. THREE.JS SCENE, LIGHTING & MATERIALS
+        // ==========================================
+        const scene = new THREE.Scene();
+        // Warm mystical sunset/torchlit temple haze
+        scene.background = new THREE.Color(0x1f0d06);
+        scene.fog = new THREE.FogExp2(0x1f0d06, 0.0115);
+
+        const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 220);
+        camera.position.set(0, 5.2, 9.5);
+
+        const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+        // Lighting
+        const ambientLight = new THREE.HemisphereLight(0xffd28a, 0x2d1408, 0.85);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffb74d, 1.3);
+        dirLight.position.set(18, 35, 22);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 1024;
+        dirLight.shadow.mapSize.height = 1024;
+        dirLight.shadow.camera.near = 5;
+        dirLight.shadow.camera.far = 120;
+        const d = 28;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+
+        // Runner's dynamic warm torch glow
+        const runnerLight = new THREE.PointLight(0xff8f00, 1.4, 18);
+        runnerLight.position.set(0, 3, 2);
+        scene.add(runnerLight);
+
+        // Shared Materials (Procedural Colors & Shaders for high FPS)
+        const materials = {
+            stoneFloor: new THREE.MeshStandardMaterial({ color: 0x5c4938, roughness: 0.85, metalness: 0.1 }),
+            stoneTrim: new THREE.MeshStandardMaterial({ color: 0x8c6d46, roughness: 0.65, metalness: 0.2 }),
+            goldTrim: new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.3, metalness: 0.8 }),
+            pillarStone: new THREE.MeshStandardMaterial({ color: 0x4a392a, roughness: 0.9 }),
+            torchFire: new THREE.MeshBasicMaterial({ color: 0xff6d00 }),
+            obstacleWood: new THREE.MeshStandardMaterial({ color: 0x3e2212, roughness: 0.8 }),
+            obstacleSpike: new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.3, metalness: 0.7 }),
+            firePit: new THREE.MeshBasicMaterial({ color: 0xff3d00 }),
+            coinGold: new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0x664400, roughness: 0.2, metalness: 0.9 }),
+            shieldOrb: new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0284c7, roughness: 0.1, metalness: 0.5, transparent: true, opacity: 0.9 }),
+            magnetOrb: new THREE.MeshStandardMaterial({ color: 0xf43f5e, emissive: 0xbe123c, roughness: 0.2, metalness: 0.6 }),
+            foliage: new THREE.MeshStandardMaterial({ color: 0x1e3f20, roughness: 0.9 })
+        };
+
+        // ==========================================
+        // 4. PLAYER CHARACTER (KASIDEVI EXPLORER)
+        // ==========================================
+        const playerGroup = new THREE.Group();
+        scene.add(playerGroup);
+
+        // Character Sub-parts for procedural running animation
+        const characterBody = new THREE.Group();
+        playerGroup.add(characterBody);
+
+        // Torso (Crimson & Gold Royal Tunic)
+        const torsoGeo = new THREE.BoxGeometry(0.85, 1.1, 0.5);
+        const torsoMat = new THREE.MeshStandardMaterial({ color: 0xb91c1c, roughness: 0.6 });
+        const torso = new THREE.Mesh(torsoGeo, torsoMat);
+        torso.position.y = 1.35;
+        torso.castShadow = true;
+        characterBody.add(torso);
+
+        // Golden Sash / Chestplate
+        const sashGeo = new THREE.BoxGeometry(0.9, 0.3, 0.55);
+        const sash = new THREE.Mesh(sashGeo, materials.goldTrim);
+        sash.position.y = 1.45;
+        characterBody.add(sash);
+
+        // Head & Royal Turban/Crown
+        const headGeo = new THREE.BoxGeometry(0.6, 0.6, 0.6);
+        const skinMat = new THREE.MeshStandardMaterial({ color: 0xd99b66, roughness: 0.5 });
+        const head = new THREE.Mesh(headGeo, skinMat);
+        head.position.y = 2.25;
+        head.castShadow = true;
+        characterBody.add(head);
+
+        const crownGeo = new THREE.CylinderGeometry(0.25, 0.38, 0.35, 8);
+        const crown = new THREE.Mesh(crownGeo, materials.goldTrim);
+        crown.position.y = 2.68;
+        characterBody.add(crown);
+
+        // Flowing Scarf/Cape
+        const capeGeo = new THREE.BoxGeometry(0.75, 1.0, 0.08);
+        const capeMat = new THREE.MeshStandardMaterial({ color: 0xf59e0b, roughness: 0.7 });
+        const cape = new THREE.Mesh(capeGeo, capeMat);
+        cape.position.set(0, 1.35, 0.32);
+        cape.rotation.x = 0.25;
+        characterBody.add(cape);
+
+        // Arms & Legs
+        const limbGeo = new THREE.BoxGeometry(0.28, 0.85, 0.28);
+        const legMat = new THREE.MeshStandardMaterial({ color: 0x291d18, roughness: 0.8 });
+
+        const leftLeg = new THREE.Mesh(limbGeo, legMat);
+        leftLeg.position.set(-0.24, 0.45, 0);
+        leftLeg.castShadow = true;
+        characterBody.add(leftLeg);
+
+        const rightLeg = new THREE.Mesh(limbGeo, legMat);
+        rightLeg.position.set(0.24, 0.45, 0);
+        rightLeg.castShadow = true;
+        characterBody.add(rightLeg);
+
+        const leftArm = new THREE.Mesh(limbGeo, skinMat);
+        leftArm.position.set(-0.6, 1.35, 0);
+        characterBody.add(leftArm);
+
+        const rightArm = new THREE.Mesh(limbGeo, skinMat);
+        rightArm.position.set(0.6, 1.35, 0);
+        characterBody.add(rightArm);
+
+        // Protective Aegis Shield Aura Mesh
+        const shieldBubbleGeo = new THREE.SphereGeometry(1.65, 20, 20);
+        const shieldBubbleMat = new THREE.MeshBasicMaterial({
+            color: 0x38bdf8,
+            transparent: true,
+            opacity: 0.25,
+            wireframe: true
+        });
+        const shieldBubble = new THREE.Mesh(shieldBubbleGeo, shieldBubbleMat);
+        shieldBubble.position.y = 1.4;
+        shieldBubble.visible = false;
+        playerGroup.add(shieldBubble);
+
+        // ==========================================
+        // 5. TEMPLE ENVIRONMENT & SEGMENT POOLING
+        // ==========================================
+        const segments = [];
+        const obstacles = [];
+        const collectibles = [];
+        const particles = [];
+
+        function createTempleSegment(zPos) {
+            const segGroup = new THREE.Group();
+            segGroup.position.z = zPos;
+
+            // Main Stone Causeway Floor (3 Lanes wide)
+            const floorWidth = LANE_WIDTH * 3 + 1.4;
+            const floorGeo = new THREE.BoxGeometry(floorWidth, 1.2, SEGMENT_LENGTH);
+            const floor = new THREE.Mesh(floorGeo, materials.stoneFloor);
+            floor.position.y = -0.6;
+            floor.receiveShadow = true;
+            segGroup.add(floor);
+
+            // Lane Dividers (Subtle Carved Stone Grooves)
+            [-LANE_WIDTH / 2, LANE_WIDTH / 2].forEach(xLine => {
+                const lineGeo = new THREE.BoxGeometry(0.12, 0.05, SEGMENT_LENGTH);
+                const line = new THREE.Mesh(lineGeo, materials.stoneTrim);
+                line.position.set(xLine, 0.01, 0);
+                segGroup.add(line);
+            });
+
+            // Ornate Side Walls / Curbs
+            [-floorWidth / 2 - 0.35, floorWidth / 2 + 0.35].forEach(sideX => {
+                const curbGeo = new THREE.BoxGeometry(0.7, 0.75, SEGMENT_LENGTH);
+                const curb = new THREE.Mesh(curbGeo, materials.stoneTrim);
+                curb.position.set(sideX, 0.35, 0);
+                curb.castShadow = true;
+                curb.receiveShadow = true;
+                segGroup.add(curb);
+
+                // Tall Carved Temple Pillars with Flaming Braziers
+                const pillarGeo = new THREE.BoxGeometry(1.1, 7.5, 1.1);
+                const pillar = new THREE.Mesh(pillarGeo, materials.pillarStone);
+                pillar.position.set(sideX * 1.18, 3.75, 0);
+                pillar.castShadow = true;
+                segGroup.add(pillar);
+
+                // Pillar Gold Capital
+                const capGeo = new THREE.BoxGeometry(1.4, 0.45, 1.4);
+                const cap = new THREE.Mesh(capGeo, materials.goldTrim);
+                cap.position.set(sideX * 1.18, 7.6, 0);
+                segGroup.add(cap);
+
+                // Brazier Flame
+                const flameGeo = new THREE.OctahedronGeometry(0.45, 0);
+                const flame = new THREE.Mesh(flameGeo, materials.torchFire);
+                flame.position.set(sideX * 1.18, 8.2, 0);
+                segGroup.add(flame);
+                segGroup.userData.flames = segGroup.userData.flames || [];
+                segGroup.userData.flames.push(flame);
+
+                // Jungle Foliage outside walls
+                const bushGeo = new THREE.DodecahedronGeometry(1.8, 0);
+                const bush = new THREE.Mesh(bushGeo, materials.foliage);
+                bush.position.set(sideX * 1.75, 0.8, (Math.random() - 0.5) * 10);
+                segGroup.add(bush);
+            });
+
+            scene.add(segGroup);
+            segments.push(segGroup);
+            return segGroup;
+        }
+
+        // Initialize starting track segments
+        for (let i = 0; i < NUM_SEGMENTS; i++) {
+            createTempleSegment(-i * SEGMENT_LENGTH);
+        }
+
+        // ==========================================
+        // 6. OBSTACLE & COLLECTIBLE SPAWNER
+        // ==========================================
+        const coinGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.14, 16);
+        coinGeo.rotateX(Math.PI / 2);
+
+        function spawnCoinLine(laneIndex, startZ, count = 5, elevated = false) {
+            const x = LANES[laneIndex];
+            for (let i = 0; i < count; i++) {
+                const coin = new THREE.Mesh(coinGeo, materials.coinGold);
+                const yOffset = elevated ? 1.8 + Math.sin((i / (count - 1)) * Math.PI) * 1.1 : 0.9;
+                coin.position.set(x, yOffset, startZ - i * 2.2);
+                coin.castShadow = true;
+                scene.add(coin);
+                collectibles.push({
+                    mesh: coin,
+                    type: 'coin',
+                    collected: false
+                });
+            }
+        }
+
+        function spawnPowerup(laneIndex, zPos) {
+            const x = LANES[laneIndex];
+            const isShield = Math.random() > 0.45;
+            const geo = isShield ? new THREE.OctahedronGeometry(0.55, 1) : new THREE.TorusGeometry(0.42, 0.16, 10, 20);
+            const mat = isShield ? materials.shieldOrb : materials.magnetOrb;
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(x, 1.2, zPos);
+            scene.add(mesh);
+
+            collectibles.push({
+                mesh: mesh,
+                type: isShield ? 'shield' : 'magnet',
+                collected: false
+            });
+        }
+
+        /**
+         * Obstacle Types:
+         * 1. 'jump'   - Low spiked barricade / fire trench (Must JUMP over)
+         * 2. 'slide'  - High stone archway gate with hanging spears (Must SLIDE under)
+         * 3. 'block'  - Tall solid temple idol pillar (Must SWITCH LANES)
+         */
+        function spawnObstacle(laneIndex, zPos, type) {
+            const x = LANES[laneIndex];
+            const obsGroup = new THREE.Group();
+            obsGroup.position.set(x, 0, zPos);
+
+            if (type === 'jump') {
+                // Low Spiked Stone & Timber Hurdle
+                const baseGeo = new THREE.BoxGeometry(2.1, 0.95, 0.75);
+                const base = new THREE.Mesh(baseGeo, materials.obstacleWood);
+                base.position.y = 0.48;
+                base.castShadow = true;
+                obsGroup.add(base);
+
+                // Glowing Ember Strip
+                const emberGeo = new THREE.BoxGeometry(1.9, 0.15, 0.8);
+                const ember = new THREE.Mesh(emberGeo, materials.firePit);
+                ember.position.y = 0.95;
+                obsGroup.add(ember);
+
+                // Golden Spikes
+                for (let s = -0.7; s <= 0.7; s += 0.46) {
+                    const spikeGeo = new THREE.ConeGeometry(0.14, 0.45, 6);
+                    const spike = new THREE.Mesh(spikeGeo, materials.obstacleSpike);
+                    spike.position.set(s, 1.15, 0);
+                    obsGroup.add(spike);
+                }
+            } else if (type === 'slide') {
+                // High Overhead Temple Beam (Must slide underneath)
+                const leftPost = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.6, 0.6), materials.pillarStone);
+                leftPost.position.set(-0.95, 1.8, 0);
+                obsGroup.add(leftPost);
+
+                const rightPost = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.6, 0.6), materials.pillarStone);
+                rightPost.position.set(0.95, 1.8, 0);
+                obsGroup.add(rightPost);
+
+                // Low Hanging Crossbeam (Clearance is 1.25 units from ground)
+                const beamGeo = new THREE.BoxGeometry(2.3, 1.65, 0.75);
+                const beam = new THREE.Mesh(beamGeo, materials.stoneTrim);
+                beam.position.set(0, 2.25, 0);
+                beam.castShadow = true;
+                obsGroup.add(beam);
+
+                const goldBand = new THREE.Mesh(new THREE.BoxGeometry(2.35, 0.25, 0.8), materials.goldTrim);
+                goldBand.position.set(0, 1.5, 0);
+                obsGroup.add(goldBand);
+            } else if (type === 'block') {
+                // Tall Solid Idol Monolith (Cannot jump or slide, must dodge)
+                const monolithGeo = new THREE.BoxGeometry(2.0, 3.4, 1.4);
+                const monolith = new THREE.Mesh(monolithGeo, materials.pillarStone);
+                monolith.position.y = 1.7;
+                monolith.castShadow = true;
+                obsGroup.add(monolith);
+
+                const idolCrown = new THREE.Mesh(new THREE.BoxGeometry(2.15, 0.4, 1.55), materials.goldTrim);
+                idolCrown.position.y = 3.45;
+                obsGroup.add(idolCrown);
+
+                const eyeGlow = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.25, 1.46), materials.firePit);
+                eyeGlow.position.y = 2.4;
+                obsGroup.add(eyeGlow);
+            }
+
+            scene.add(obsGroup);
+            obstacles.push({
+                mesh: obsGroup,
+                lane: laneIndex,
+                type: type,
+                passed: false
+            });
+        }
+
+        function populateSegmentRow(zPos) {
+            // Always leave at least one valid path so the run is fair and skill-based
+            const lanes = [0, 1, 2];
+            // Shuffle lanes
+            for (let i = lanes.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [lanes[i], lanes[j]] = [lanes[j], lanes[i]];
+            }
+
+            const types = ['jump', 'slide', 'block'];
+            const primaryObsType = types[Math.floor(Math.random() * types.length)];
+            spawnObstacle(lanes[0], zPos, primaryObsType);
+
+            // 65% chance for a second obstacle in another lane
+            if (Math.random() < 0.65) {
+                const secondType = types[Math.floor(Math.random() * types.length)];
+                spawnObstacle(lanes[1], zPos, secondType);
+            }
+
+            // Spawn coins on the safe lane (lanes[2]) or arching over a 'jump' obstacle
+            if (primaryObsType === 'jump' && Math.random() < 0.45) {
+                spawnCoinLine(lanes[0], zPos + 4.4, 5, true);
+            } else {
+                spawnCoinLine(lanes[2], zPos + 4, 5, false);
+            }
+
+            // Occasional Power-up Spawn (12% chance per row)
+            if (Math.random() < 0.12) {
+                spawnPowerup(lanes[2], zPos - 8);
+            }
+        }
+
+        // Particle Burst Effect for Coins & Crashes
+        const particleGeo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
+        function spawnBurst(pos, colorHex, count = 10) {
+            const mat = new THREE.MeshBasicMaterial({ color: colorHex });
+            for (let i = 0; i < count; i++) {
+                const p = new THREE.Mesh(particleGeo, mat);
+                p.position.copy(pos);
+                scene.add(p);
+                particles.push({
+                    mesh: p,
+                    vel: new THREE.Vector3(
+                        (Math.random() - 0.5) * 9,
+                        Math.random() * 7 + 2,
+                        (Math.random() - 0.5) * 9
+                    ),
+                    life: 0.55
+                });
+            }
+        }
+
+        // ==========================================
+        // 7. PLAYER CONTROLS (KEYBOARD, SWIPE, BUTTONS & CAMERA DRAG)
+        // ==========================================
+        function moveLeft() {
+            if (!state.isPlaying) return;
+            if (state.currentLane > 0) {
+                state.currentLane--;
+                state.targetX = LANES[state.currentLane];
+                audio.playLaneSwitch();
+            }
+        }
+
+        function moveRight() {
+            if (!state.isPlaying) return;
+            if (state.currentLane < 2) {
+                state.currentLane++;
+                state.targetX = LANES[state.currentLane];
+                audio.playLaneSwitch();
+            }
+        }
+
+        function triggerJump() {
+            if (!state.isPlaying) return;
+            if (!state.isJumping) {
+                state.isJumping = true;
+                state.jumpVelocity = 19.5;
+                // Cancel slide if jumping
+                if (state.isSliding) {
+                    state.isSliding = false;
+                    state.slideTimer = 0;
+                }
+                audio.playJump();
+            }
+        }
+
+        function triggerSlide() {
+            if (!state.isPlaying) return;
+            if (!state.isSliding) {
+                state.isSliding = true;
+                state.slideTimer = 0.72;
+                // Fast-fall if mid-air
+                if (state.isJumping) {
+                    state.jumpVelocity = -28;
+                }
+                audio.playSlide();
+            }
+        }
+
+        // Keyboard Listeners
+        window.addEventListener('keydown', (e) => {
+            if (!state.isPlaying) {
+                if (e.code === 'Space' || e.code === 'Enter') {
+                    if (!startScreenEl.classList.contains('hidden')) startGame();
+                    else if (!gameoverScreenEl.classList.contains('hidden')) startGame();
+                }
+                return;
+            }
+            switch (e.code) {
+                case 'ArrowLeft':
+                case 'KeyA':
+                    moveLeft();
+                    break;
+                case 'ArrowRight':
+                case 'KeyD':
+                    moveRight();
+                    break;
+                case 'ArrowUp':
+                case 'KeyW':
+                case 'Space':
+                    triggerJump();
+                    break;
+                case 'ArrowDown':
+                case 'KeyS':
+                    triggerSlide();
+                    break;
+            }
+        });
+
+        // Touch Swipe Detection
+        let touchStartX = 0;
+        let touchStartY = 0;
+        canvas.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 0) {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+            }
+        }, { passive: true });
+
+        canvas.addEventListener('touchend', (e) => {
+            if (!state.isPlaying || e.changedTouches.length === 0) return;
+            const dx = e.changedTouches[0].clientX - touchStartX;
+            const dy = e.changedTouches[0].clientY - touchStartY;
+            const absX = Math.abs(dx);
+            const absY = Math.abs(dy);
+
+            if (Math.max(absX, absY) > 25) {
+                if (absX > absY) {
+                    if (dx > 0) moveRight();
+                    else moveLeft();
+                } else {
+                    if (dy < 0) triggerJump();
+                    else triggerSlide();
+                }
+            }
+        }, { passive: true });
+
+        // On-Screen Mobile Button Listeners
+        document.getElementById('btn-left').addEventListener('click', moveLeft);
+        document.getElementById('btn-right').addEventListener('click', moveRight);
+        document.getElementById('btn-jump').addEventListener('click', triggerJump);
+        document.getElementById('btn-slide').addEventListener('click', triggerSlide);
+
+        // Mouse Drag Camera Angle Control
+        let isDraggingCamera = false;
+        let prevMouseX = 0;
+        let prevMouseY = 0;
+
+        canvas.addEventListener('mousedown', (e) => {
+            isDraggingCamera = true;
+            prevMouseX = e.clientX;
+            prevMouseY = e.clientY;
+        });
+
+        window.addEventListener('mouseup', () => {
+            isDraggingCamera = false;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!isDraggingCamera) return;
+            const deltaX = e.clientX - prevMouseX;
+            const deltaY = e.clientY - prevMouseY;
+            prevMouseX = e.clientX;
+            prevMouseY = e.clientY;
+
+            state.cameraOffsetYaw = THREE.MathUtils.clamp(state.cameraOffsetYaw - deltaX * 0.015, -4.5, 4.5);
+            state.cameraOffsetPitch = THREE.MathUtils.clamp(state.cameraOffsetPitch + deltaY * 0.012, -1.5, 3.5);
+        });
+
+        // Sound Toggle
+        const soundToggleBtn = document.getElementById('sound-toggle');
+        const soundOnIcon = document.getElementById('sound-on-icon');
+        const soundOffIcon = document.getElementById('sound-off-icon');
+
+        soundToggleBtn.addEventListener('click', () => {
+            audio.enabled = !audio.enabled;
+            soundOnIcon.classList.toggle('hidden', !audio.enabled);
+            soundOffIcon.classList.toggle('hidden', audio.enabled);
+        });
+
+        // ==========================================
+        // 8. GAME LIFECYCLE (START, RESET, GAME OVER)
+        // ==========================================
+        function clearEntities() {
+            obstacles.forEach(o => scene.remove(o.mesh));
+            obstacles.length = 0;
+
+            collectibles.forEach(c => scene.remove(c.mesh));
+            collectibles.length = 0;
+
+            particles.forEach(p => scene.remove(p.mesh));
+            particles.length = 0;
+        }
+
+        async function startGame() {
+            await audio.init();
+            clearEntities();
+
+            // Reset state
+            state.isPlaying = true;
+            state.isGameOver = false;
+            state.score = 0;
+            state.coins = 0;
+            state.speed = state.baseSpeed;
+            state.currentLane = 1;
+            state.targetX = 0;
+            state.isJumping = false;
+            state.jumpVelocity = 0;
+            state.isSliding = false;
+            state.slideTimer = 0;
+            state.shieldActive = false;
+            state.shieldTimer = 0;
+            state.magnetActive = false;
+            state.magnetTimer = 0;
+            state.shakeIntensity = 0;
+
+            // Reset player position & scale
+            playerGroup.position.set(0, 0, 0);
+            characterBody.scale.set(1, 1, 1);
+            characterBody.rotation.set(0, 0, 0);
+            shieldBubble.visible = false;
+
+            // Reset segments
+            for (let i = 0; i < segments.length; i++) {
+                segments[i].position.z = -i * SEGMENT_LENGTH;
+            }
+
+            // Populate initial obstacles & coins ahead of player
+            for (let z = -45; z >= -220; z -= 26) {
+                populateSegmentRow(z);
+            }
+
+            // UI transitions
+            startScreenEl.classList.add('hidden');
+            gameoverScreenEl.classList.add('hidden');
+            hudEl.classList.remove('hidden');
+            mobileControlsEl.classList.remove('hidden');
+            powerupHudEl.classList.add('hidden');
+
+            updateHUD();
+        }
+
+        function triggerGameOver() {
+            state.isPlaying = false;
+            state.isGameOver = true;
+            state.shakeIntensity = 0.8;
+            audio.playCrash();
+            spawnBurst(playerGroup.position.clone().add(new THREE.Vector3(0, 1.2, 0)), 0xff5500, 22);
+
+            const finalScore = Math.floor(state.score);
+            if (finalScore > state.highScore) {
+                state.highScore = finalScore;
+                localStorage.setItem('kasidevirun_highscore', state.highScore.toString());
+            }
+
+            document.getElementById('final-score').textContent = finalScore.toLocaleString();
+            document.getElementById('final-coins').textContent = state.coins.toLocaleString();
+            document.getElementById('final-highscore').textContent = state.highScore.toLocaleString();
+            menuHighscoreEl.textContent = state.highScore.toLocaleString();
+
+            setTimeout(() => {
+                hudEl.classList.add('hidden');
+                mobileControlsEl.classList.add('hidden');
+                gameoverScreenEl.classList.remove('hidden');
+            }, 450);
+        }
+
+        function updateHUD() {
+            scoreDisplayEl.textContent = Math.floor(state.score).toLocaleString();
+            coinDisplayEl.textContent = state.coins.toLocaleString();
+
+            if (state.shieldActive) {
+                powerupHudEl.classList.remove('hidden');
+                powerupIconEl.textContent = '🛡️';
+                powerupNameEl.textContent = 'Aegis Shield';
+                powerupNameEl.className = 'text-xs font-bold text-cyan-300 uppercase';
+                powerupBarEl.className = 'h-full bg-cyan-400 transition-all duration-75';
+                powerupBarEl.style.width = `${(state.shieldTimer / 8) * 100}%`;
+            } else if (state.magnetActive) {
+                powerupHudEl.classList.remove('hidden');
+                powerupIconEl.textContent = '🧲';
+                powerupNameEl.textContent = 'Relic Magnet';
+                powerupNameEl.className = 'text-xs font-bold text-rose-400 uppercase';
+                powerupBarEl.className = 'h-full bg-rose-500 transition-all duration-75';
+                powerupBarEl.style.width = `${(state.magnetTimer / 10) * 100}%`;
+            } else {
+                powerupHudEl.classList.add('hidden');
+            }
+        }
+
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('restart-btn').addEventListener('click', startGame);
+
+        // ==========================================
+        // 9. MAIN ANIMATION & PHYSICS LOOP
+        // ==========================================
+        const clock = new THREE.Clock();
+        let runCycle = 0;
+        let nextSpawnZ = -220;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const dt = Math.min(clock.getDelta(), 0.05);
+            const elapsed = clock.getElapsedTime();
+
+            // Slowly return custom camera offset toward neutral when not dragging
+            if (!isDraggingCamera) {
+                state.cameraOffsetYaw = THREE.MathUtils.lerp(state.cameraOffsetYaw, 0, dt * 1.8);
+                state.cameraOffsetPitch = THREE.MathUtils.lerp(state.cameraOffsetPitch, 0, dt * 1.8);
+            }
+
+            if (state.isPlaying) {
+                // Gradually increase speed for thrilling progression
+                state.speed = Math.min(state.maxSpeed, state.speed + dt * 0.45);
+                const moveDist = state.speed * dt;
+                state.score += moveDist * 1.5;
+
+                // Powerup Timers
+                if (state.shieldActive) {
+                    state.shieldTimer -= dt;
+                    shieldBubble.visible = true;
+                    shieldBubble.rotation.y += dt * 2.5;
+                    if (state.shieldTimer <= 0) {
+                        state.shieldActive = false;
+                        shieldBubble.visible = false;
+                    }
+                }
+                if (state.magnetActive) {
+                    state.magnetTimer -= dt;
+                    if (state.magnetTimer <= 0) {
+                        state.magnetActive = false;
+                    }
+                }
+
+                // Horizontal Lane Smooth Interpolation
+                playerGroup.position.x = THREE.MathUtils.lerp(playerGroup.position.x, state.targetX, dt * 14);
+                // Subtle banking tilt when switching lanes
+                const tiltZ = (playerGroup.position.x - state.targetX) * 0.16;
+                characterBody.rotation.z = tiltZ;
+
+                // Vertical Jump Physics
+                if (state.isJumping) {
+                    playerGroup.position.y += state.jumpVelocity * dt;
+                    state.jumpVelocity += state.gravity * dt;
+
+                    if (playerGroup.position.y <= 0) {
+                        playerGroup.position.y = 0;
+                        state.isJumping = false;
+                        state.jumpVelocity = 0;
+                    }
+                }
+
+                // Slide Physics & Squash Animation
+                if (state.isSliding) {
+                    state.slideTimer -= dt;
+                    characterBody.scale.y = THREE.MathUtils.lerp(characterBody.scale.y, 0.45, dt * 20);
+                    characterBody.rotation.x = THREE.MathUtils.lerp(characterBody.rotation.x, -0.45, dt * 18);
+                    if (state.slideTimer <= 0) {
+                        state.isSliding = false;
+                    }
+                } else {
+                    characterBody.scale.y = THREE.MathUtils.lerp(characterBody.scale.y, 1.0, dt * 16);
+                    characterBody.rotation.x = THREE.MathUtils.lerp(characterBody.rotation.x, 0.12, dt * 16);
+                }
+
+                // Running Limb Swing Animation
+                if (!state.isJumping && !state.isSliding) {
+                    runCycle += dt * (state.speed * 0.65);
+                    leftLeg.rotation.x = Math.sin(runCycle) * 0.85;
+                    rightLeg.rotation.x = -Math.sin(runCycle) * 0.85;
+                    leftArm.rotation.x = -Math.sin(runCycle) * 0.75;
+                    rightArm.rotation.x = Math.sin(runCycle) * 0.75;
+                    characterBody.position.y = Math.abs(Math.cos(runCycle)) * 0.14;
+                } else if (state.isJumping) {
+                    leftLeg.rotation.x = 0.5;
+                    rightLeg.rotation.x = -0.35;
+                    leftArm.rotation.x = -0.8;
+                    rightArm.rotation.x = -0.8;
+                }
+
+                // Flowing cape flutter
+                cape.rotation.x = 0.35 + Math.sin(elapsed * 18) * 0.12;
+
+                // Move Temple Segments & Recycle Endless Track
+                segments.forEach(seg => {
+                    seg.position.z += moveDist;
+                    // Flicker torch flames
+                    if (seg.userData.flames) {
+                        seg.userData.flames.forEach((f, idx) => {
+                            f.scale.setScalar(0.85 + Math.sin(elapsed * 15 + idx) * 0.25);
+                        });
+                    }
+                    if (seg.position.z > SEGMENT_LENGTH) {
+                        seg.position.z -= NUM_SEGMENTS * SEGMENT_LENGTH;
+                    }
+                });
+
+                // Spawn new rows continuously
+                nextSpawnZ += moveDist;
+                if (nextSpawnZ >= -195) {
+                    populateSegmentRow(-225);
+                    nextSpawnZ = -225;
+                }
+
+                // Update & Check Obstacle Collisions
+                const playerX = playerGroup.position.x;
+                const playerY = playerGroup.position.y;
+                const playerHeight = state.isSliding ? 1.05 : 2.55;
+
+                for (let i = obstacles.length - 1; i >= 0; i--) {
+                    const obs = obstacles[i];
+                    obs.mesh.position.z += moveDist;
+
+                    const dz = Math.abs(obs.mesh.position.z);
+                    const dx = Math.abs(obs.mesh.position.x - playerX);
+
+                    // Collision Window along Z and X
+                    if (dz < 0.75 && dx < 0.85) {
+                        let hit = false;
+                        if (obs.type === 'jump') {
+                            // Hurdle height is ~1.15; player must jump above 0.95
+                            if (playerY < 0.95) hit = true;
+                        } else if (obs.type === 'slide') {
+                            // Crossbeam bottom is at 1.42; player top (playerY + playerHeight) must stay below 1.45
+                            if (playerY + playerHeight > 1.45) hit = true;
+                        } else if (obs.type === 'block') {
+                            // Solid pillar hits unless player somehow cleared 3.4 units
+                            if (playerY < 3.3) hit = true;
+                        }
+
+                        if (hit) {
+                            if (state.shieldActive) {
+                                // Smash through obstacle with Aegis Shield!
+                                state.shieldActive = false;
+                                shieldBubble.visible = false;
+                                state.shakeIntensity = 0.45;
+                                audio.playShieldBreak();
+                                spawnBurst(obs.mesh.position.clone().add(new THREE.Vector3(0, 1.2, 0)), 0x38bdf8, 16);
+                                scene.remove(obs.mesh);
+                                obstacles.splice(i, 1);
+                                continue;
+                            } else {
+                                triggerGameOver();
+                                break;
+                            }
+                        }
+                    }
+
+                    // Cleanup passed obstacles
+                    if (obs.mesh.position.z > 15) {
+                        scene.remove(obs.mesh);
+                        obstacles.splice(i, 1);
+                    }
+                }
+
+                // Update & Check Collectible Pickups (Coins & Powerups)
+                for (let i = collectibles.length - 1; i >= 0; i--) {
+                    const item = collectibles[i];
+                    item.mesh.position.z += moveDist;
+                    item.mesh.rotation.y += dt * 3.5;
+
+                    // Magnet Attraction Effect
+                    if (state.magnetActive && item.type === 'coin' && item.mesh.position.z > -28 && item.mesh.position.z < 4) {
+                        item.mesh.position.x = THREE.MathUtils.lerp(item.mesh.position.x, playerX, dt * 10);
+                        item.mesh.position.y = THREE.MathUtils.lerp(item.mesh.position.y, playerY + 1.2, dt * 10);
+                        item.mesh.position.z = THREE.MathUtils.lerp(item.mesh.position.z, 0, dt * 8);
+                    }
+
+                    const dx = Math.abs(item.mesh.position.x - playerX);
+                    const dy = Math.abs(item.mesh.position.y - (playerY + 1.1));
+                    const dz = Math.abs(item.mesh.position.z);
+
+                    if (dx < 1.05 && dy < 1.35 && dz < 1.1) {
+                        if (item.type === 'coin') {
+                            state.coins += 1;
+                            state.score += 50;
+                            audio.playCoin();
+                            spawnBurst(item.mesh.position, 0xffd700, 6);
+                        } else if (item.type === 'shield') {
+                            state.shieldActive = true;
+                            state.shieldTimer = 8.0;
+                            state.magnetActive = false;
+                            audio.playPowerup();
+                            spawnBurst(item.mesh.position, 0x38bdf8, 14);
+                        } else if (item.type === 'magnet') {
+                            state.magnetActive = true;
+                            state.magnetTimer = 10.0;
+                            state.shieldActive = false;
+                            audio.playPowerup();
+                            spawnBurst(item.mesh.position, 0xf43f5e, 14);
+                        }
+
+                        scene.remove(item.mesh);
+                        collectibles.splice(i, 1);
+                        continue;
+                    }
+
+                    if (item.mesh.position.z > 15) {
+                        scene.remove(item.mesh);
+                        collectibles.splice(i, 1);
+                    }
+                }
+
+                updateHUD();
+            } else {
+                // Idle Demo Camera Orbit on Menu / Game Over
+                segments.forEach(seg => {
+                    seg.position.z += 6 * dt;
+                    if (seg.position.z > SEGMENT_LENGTH) {
+                        seg.position.z -= NUM_SEGMENTS * SEGMENT_LENGTH;
+                    }
+                });
+            }
+
+            // Update Burst Particles
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.life -= dt;
+                p.mesh.position.addScaledVector(p.vel, dt);
+                p.vel.y -= 20 * dt;
+                p.mesh.scale.setScalar(Math.max(0.01, p.life * 1.8));
+                if (p.life <= 0) {
+                    scene.remove(p.mesh);
+                    particles.splice(i, 1);
+                }
+            }
+
+            // Camera Follow + Shake + Mouse Angle Offset
+            let shakeX = 0;
+            let shakeY = 0;
+            if (state.shakeIntensity > 0) {
+                shakeX = (Math.random() - 0.5) * state.shakeIntensity;
+                shakeY = (Math.random() - 0.5) * state.shakeIntensity;
+                state.shakeIntensity = Math.max(0, state.shakeIntensity - dt * 2.2);
+            }
+
+            const targetCamX = playerGroup.position.x * 0.55 + state.cameraOffsetYaw + shakeX;
+            const targetCamY = 5.2 + playerGroup.position.y * 0.35 + state.cameraOffsetPitch + shakeY;
+            camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetCamX, dt * 8);
+            camera.position.y = THREE.MathUtils.lerp(camera.position.y, targetCamY, dt * 8);
+            camera.lookAt(playerGroup.position.x * 0.4, 1.8, -12);
+
+            // Keep runner point light aligned
+            runnerLight.position.set(playerGroup.position.x, playerGroup.position.y + 3.2, 1.5);
+
+            renderer.render(scene, camera);
+        }
+
+        // Handle Responsive Canvas Resizing
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start animation loop on window load
+        window.onload = function () {
+            animate();
+        };
+    </script>
+</body>
+</html>
